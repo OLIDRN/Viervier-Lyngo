@@ -55,7 +55,7 @@ function DuelLanding({ onConfigure }) {
       const hostId = crypto.randomUUID();
       const { data: room, error: err } = await supabase
         .from("duel_rooms")
-        .insert({ code, host_id: hostId, theme_id: "bases", status: "waiting" })
+        .insert({ code, host_id: hostId, theme_id: "bases", status: "waiting", round_count: 3 })
         .select("id")
         .single();
       if (err) throw err;
@@ -280,6 +280,7 @@ function DuelRoom() {
   const [room, setRoom] = useState(null);
   const [members, setMembers] = useState([]);
   const [themeId, setThemeId] = useState("bases");
+  const [roundCount, setRoundCount] = useState(3);
   const [language, setLanguage] = useState("javascript");
   const [exercise, setExercise] = useState(null);
   const [codeContent, setCodeContent] = useState("");
@@ -289,6 +290,7 @@ function DuelRoom() {
   const [copied, setCopied] = useState(false);
   const startTimeRef = useRef(null);
   const [elapsed, setElapsed] = useState(0);
+  const [finalStandings, setFinalStandings] = useState(null);
 
   const isHost = room && hostIdRef.current && room.host_id === hostIdRef.current;
   const themeForFiveM = themeId === "fivem";
@@ -306,12 +308,14 @@ function DuelRoom() {
       }
       setRoom(r);
       setThemeId(r.theme_id || "bases");
-      if (r.exercise_id != null && r.started_at) {
+      setRoundCount(r.round_count ?? 3);
+      if (r.exercise_id != null && (r.round_started_at || r.started_at)) {
         const list = EXERCISES[r.theme_id] || [];
         const ex = list.find((e) => e.id === r.exercise_id) || list[0];
         setExercise(ex);
         setCodeContent((LANGUAGES[themeForFiveM ? "lua" : language] || LANGUAGES.javascript).starter);
-        startTimeRef.current = new Date(r.started_at).getTime();
+        startTimeRef.current = new Date(r.round_started_at || r.started_at).getTime();
+        setSubmittedAt(null);
       }
     };
     fetchRoom();
@@ -321,12 +325,16 @@ function DuelRoom() {
       .on("postgres_changes", { event: "*", schema: "public", table: "duel_rooms", filter: `code=eq.${code.toUpperCase()}` }, (p) => {
         if (p.new) {
           setRoom(p.new);
+          setRoundCount(p.new.round_count ?? 3);
           if (p.new.status === "playing" && p.new.exercise_id != null) {
             const list = EXERCISES[p.new.theme_id] || [];
             const ex = list.find((e) => e.id === p.new.exercise_id) || list[0];
             setExercise(ex);
             setCodeContent((LANGUAGES[p.new.theme_id === "fivem" ? "lua" : "javascript"] || LANGUAGES.javascript).starter);
-            startTimeRef.current = p.new.started_at ? new Date(p.new.started_at).getTime() : null;
+            const roundStart = p.new.round_started_at || p.new.started_at;
+            startTimeRef.current = roundStart ? new Date(roundStart).getTime() : null;
+            setSubmittedAt(null);
+            setSubmitError("");
           }
         }
       })
@@ -350,17 +358,47 @@ function DuelRoom() {
     })();
   }, [room?.id]);
 
-  // Garder themeId synchronisé avec la room (realtime ou chargement)
+  // Garder themeId et roundCount synchronisés avec la room
   useEffect(() => {
     if (room?.theme_id) setThemeId(room.theme_id);
-  }, [room?.theme_id]);
+    if (room?.round_count != null) setRoundCount(room.round_count);
+  }, [room?.theme_id, room?.round_count]);
 
-  // Timer
+  // Timer (basé sur round_started_at pour la manche en cours)
   useEffect(() => {
     if (room?.status !== "playing" || !startTimeRef.current) return;
     const t = setInterval(() => setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000)), 200);
     return () => clearInterval(t);
-  }, [room?.status]);
+  }, [room?.status, room?.round_started_at]);
+
+  // Charger le classement final (duel_round_results) quand la partie est terminée
+  useEffect(() => {
+    if (room?.status !== "finished" || !room?.id) {
+      setFinalStandings(null);
+      return;
+    }
+    (async () => {
+      const { data: rows } = await supabase
+        .from("duel_round_results")
+        .select("user_id, points, round_index")
+        .eq("room_id", room.id)
+        .order("round_index", { ascending: true });
+      if (!rows?.length) {
+        setFinalStandings([]);
+        return;
+      }
+      const byUser = {};
+      rows.forEach((r) => {
+        if (!byUser[r.user_id]) byUser[r.user_id] = { user_id: r.user_id, totalPoints: 0, details: [] };
+        byUser[r.user_id].totalPoints += r.points ?? 0;
+        byUser[r.user_id].details.push(r.points ?? 0);
+      });
+      const standings = Object.values(byUser).sort((a, b) => b.totalPoints - a.totalPoints);
+      const names = Object.fromEntries(members.map((m) => [m.user_id, m.user_name]));
+      standings.forEach((s) => { s.user_name = names[s.user_id] ?? "?"; });
+      setFinalStandings(standings);
+    })();
+  }, [room?.status, room?.id, members]);
 
   const copyLink = useCallback(() => {
     const url = `${window.location.origin}/duel/room/${code}`;
@@ -374,17 +412,22 @@ function DuelRoom() {
     const list = EXERCISES[themeId] || [];
     if (list.length === 0) return;
     const ex = list[Math.floor(Math.random() * list.length)];
-    const startedAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    const count = room.round_count ?? roundCount ?? 3;
     await supabase.from("duel_rooms").update({
       theme_id: themeId,
       exercise_id: ex.id,
       status: "playing",
-      started_at: startedAt,
+      started_at: now,
+      round_count: count,
+      current_round: 1,
+      round_started_at: now,
     }).eq("id", room.id);
     setExercise(ex);
     setCodeContent((LANGUAGES[themeId === "fivem" ? "lua" : "javascript"] || LANGUAGES.javascript).starter);
-    startTimeRef.current = new Date(startedAt).getTime();
-  }, [room, isHost, themeId]);
+    startTimeRef.current = new Date(now).getTime();
+    setSubmittedAt(null);
+  }, [room, isHost, themeId, roundCount]);
 
   const submitSolution = useCallback(async () => {
     if (!exercise || !room || room.status !== "playing" || submittedAt) return;
@@ -402,6 +445,52 @@ function DuelRoom() {
       const now = new Date().toISOString();
       await supabase.from("duel_room_members").update({ submitted_at: now, correct: true }).eq("room_id", room.id).eq("user_id", uid);
       setSubmittedAt(now);
+
+      // Fin de manche : récupérer les membres ayant soumis (ordre par submitted_at), attribuer points, round_results, reset members, next round ou finished
+      const { data: membersWithTimes } = await supabase
+        .from("duel_room_members")
+        .select("id, user_id, user_name, submitted_at")
+        .eq("room_id", room.id)
+        .not("submitted_at", "is", null)
+        .order("submitted_at", { ascending: true });
+      if (!membersWithTimes?.length) return;
+
+      const roundIndex = room.current_round ?? 1;
+      const pointsByRank = [3, 2, 1];
+      const rows = membersWithTimes.map((m, i) => ({
+        room_id: room.id,
+        round_index: roundIndex,
+        user_id: m.user_id,
+        submitted_at: m.submitted_at,
+        points: i < 3 ? pointsByRank[i] : 0,
+      }));
+      await supabase.from("duel_round_results").insert(rows);
+
+      await supabase.from("duel_room_members").update({ submitted_at: null, correct: null }).eq("room_id", room.id);
+
+      const roundCountVal = room.round_count ?? 3;
+      if (roundIndex >= roundCountVal) {
+        await supabase.from("duel_rooms").update({ status: "finished" }).eq("id", room.id);
+        setRoom((r) => (r && r.id === room.id ? { ...r, status: "finished" } : r));
+      } else {
+        const list = EXERCISES[room.theme_id] || [];
+        const nextEx = list.length ? list[Math.floor(Math.random() * list.length)] : null;
+        const nextRound = roundIndex + 1;
+        const payload = {
+          current_round: nextRound,
+          round_started_at: new Date().toISOString(),
+          ...(nextEx && { exercise_id: nextEx.id }),
+        };
+        await supabase.from("duel_rooms").update(payload).eq("id", room.id);
+        setRoom((r) => (r && r.id === room.id ? { ...r, ...payload } : r));
+        if (nextEx) {
+          setExercise(nextEx);
+          setCodeContent((LANGUAGES[room.theme_id === "fivem" ? "lua" : "javascript"] || LANGUAGES.javascript).starter);
+          startTimeRef.current = Date.now();
+          setSubmittedAt(null);
+          setSubmitError("");
+        }
+      }
     } catch (e) {
       setSubmitError(e.message || "Erreur");
     } finally {
@@ -547,12 +636,18 @@ function DuelRoom() {
 
         {/* Thème choisi — visible par les joueurs (non-hôtes) */}
         {!isHost && (
-          <div className="rounded-2xl border border-white/[0.08] bg-[#0d1117]/95 p-5 shadow-lg">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Thème de l'exercice</p>
-            <p className="text-sm text-slate-400">
-              L'hôte a choisi : <span className={`font-semibold ${THEMES.find((x) => x.id === themeId)?.colorText || "text-white"}`}>{THEMES.find((x) => x.id === themeId)?.title || themeId}</span>
-            </p>
-          </div>
+          <>
+            <div className="rounded-2xl border border-white/[0.08] bg-[#0d1117]/95 p-5 shadow-lg">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Thème de l'exercice</p>
+              <p className="text-sm text-slate-400">
+                L'hôte a choisi : <span className={`font-semibold ${THEMES.find((x) => x.id === themeId)?.colorText || "text-white"}`}>{THEMES.find((x) => x.id === themeId)?.title || themeId}</span>
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.08] bg-[#0d1117]/95 p-5 shadow-lg">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Nombre d'exercices</p>
+              <p className="text-sm text-slate-400">Série de <span className="font-semibold text-white">{room?.round_count ?? roundCount ?? 3}</span> exercices.</p>
+            </div>
+          </>
         )}
 
         {!themeForFiveM && (
@@ -607,6 +702,26 @@ function DuelRoom() {
                   </button>
                 ))}
               </div>
+              <p className="mt-5 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Nombre d'exercices</p>
+              <div className="flex flex-wrap gap-2">
+                {[3, 5, 10].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={async () => {
+                      setRoundCount(n);
+                      await supabase.from("duel_rooms").update({ round_count: n }).eq("id", room.id);
+                    }}
+                    className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition-all ${
+                      (room.round_count ?? roundCount) === n
+                        ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
+                        : "border-white/[0.08] bg-white/[0.04] text-slate-400 hover:border-white/[0.12] hover:text-white"
+                    }`}
+                  >
+                    {n} exercices
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={startGame}
@@ -619,6 +734,83 @@ function DuelRoom() {
             </div>
           </div>
         )}
+      </motion.div>
+    );
+  }
+
+  // Partie terminée
+  if (room.status === "finished") {
+    const roundCountVal = room.round_count ?? 3;
+    const winner = finalStandings?.[0];
+
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-2xl space-y-6">
+        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0d1117] shadow-xl">
+          <div className="h-1 w-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400" />
+          <div className="p-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/20">
+              <Trophy className="h-8 w-8 text-amber-400" />
+            </div>
+            <h2 className="font-mono text-2xl font-bold text-white">Partie terminée</h2>
+            <p className="mt-2 text-slate-400">
+              Série de {roundCountVal} exercices.
+              {winner && (
+                <span className="mt-2 block text-lg font-semibold text-amber-300">
+                  {winner.user_name} a gagné
+                </span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate("/duel")}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 font-medium text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Retour au duel
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/[0.08] bg-[#0d1117]/95 p-6 shadow-lg">
+          <p className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <Trophy className="h-4 w-4 text-amber-400/80" />
+            Classement final
+          </p>
+          {finalStandings === null ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-slate-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Chargement du classement…
+            </div>
+          ) : finalStandings.length === 0 ? (
+            <p className="py-4 text-center text-slate-500">Aucun résultat enregistré.</p>
+          ) : (
+            <ul className="space-y-3">
+              {finalStandings.map((s, i) => {
+                const isFirst = i === 0;
+                const detailStr = s.details?.length ? s.details.join(" + ") : "";
+                return (
+                  <li
+                    key={s.user_id}
+                    className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${
+                      isFirst ? "border-amber-500/30 bg-amber-500/10" : "border-white/[0.06] bg-white/[0.02]"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl font-mono text-lg font-bold ${
+                        i === 0 ? "bg-amber-500/25 text-amber-400" : i === 1 ? "bg-slate-400/20 text-slate-300" : "bg-emerald-500/15 text-emerald-400/90"
+                      }`}
+                    >
+                      {i + 1}
+                    </span>
+                    <span className={`flex-1 font-medium ${isFirst ? "text-amber-200" : "text-white"}`}>{s.user_name}</span>
+                    <span className="text-sm font-semibold text-white">{s.totalPoints} pts</span>
+                    {detailStr && <span className="text-xs text-slate-500">({detailStr})</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </motion.div>
     );
   }
@@ -646,7 +838,9 @@ function DuelRoom() {
               </button>
               <div>
                 <p className="font-mono text-lg font-bold tracking-tight text-white">{exercise.title}</p>
-                <p className="mt-0.5 text-sm text-slate-500">Même exercice pour tous — le plus rapide gagne.</p>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  Exercice {room.current_round ?? 1} / {room.round_count ?? roundCount ?? 3} — le plus rapide gagne la manche.
+                </p>
               </div>
               <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2 font-mono text-lg font-bold text-emerald-400">
                 <Zap className="h-5 w-5" />
@@ -732,7 +926,8 @@ function DuelRoom() {
           </p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {sortedByTime.map((m, i) => {
-              const sec = Math.round((new Date(m.submitted_at) - new Date(room.started_at)) / 1000);
+              const roundStart = room.round_started_at || room.started_at;
+              const sec = roundStart ? Math.round((new Date(m.submitted_at) - new Date(roundStart)) / 1000) : 0;
               const isFirst = i === 0;
               return (
                 <div
