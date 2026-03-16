@@ -1,6 +1,56 @@
 let pyodideInstance = null;
 let pyodideLoadingPromise = null;
 
+// ── Lua (Fengari) ─────────────────────────────────────────────────────────
+import * as fengari from "fengari";
+
+function runLuaSync(code) {
+  const { lauxlib, lualib, lua: luaApi, to_luastring } = fengari;
+  const L = lauxlib.luaL_newstate();
+  if (!L) return { output: null, error: "Impossible de créer l'état Lua." };
+  lualib.luaL_openlibs(L);
+
+  const lines = [];
+  const capturePrint = (L) => {
+    const n = luaApi.lua_gettop(L);
+    const parts = [];
+    for (let i = 1; i <= n; i++) {
+      lauxlib.luaL_tolstring(L, i, null);
+      const s = luaApi.lua_tojsstring(L, -1);
+      luaApi.lua_pop(L, 1);
+      parts.push(s != null ? s : "?");
+    }
+    lines.push(parts.join("\t"));
+    return 0;
+  };
+
+  luaApi.lua_pushjsfunction(L, capturePrint);
+  luaApi.lua_setglobal(L, to_luastring("print"));
+
+  const codeStr = to_luastring(code);
+  const loadStatus = lauxlib.luaL_loadstring(L, codeStr);
+  if (loadStatus !== luaApi.LUA_OK) {
+    const err = luaApi.lua_tojsstring(L, -1);
+    luaApi.lua_pop(L, 1);
+    return { output: null, error: err != null ? err : "Erreur de chargement." };
+  }
+  const callStatus = luaApi.lua_pcall(L, 0, 0, 0);
+  if (callStatus !== luaApi.LUA_OK) {
+    const err = luaApi.lua_tojsstring(L, -1);
+    luaApi.lua_pop(L, 1);
+    return { output: null, error: err != null ? err : "Erreur d'exécution." };
+  }
+  return { output: lines.join("\n"), error: null };
+}
+
+export function runLua(code) {
+  try {
+    return runLuaSync(code);
+  } catch (e) {
+    return { output: null, error: e.message || String(e) };
+  }
+}
+
 export function runJavaScript(code) {
   const lines = [];
   const fakeConsole = {

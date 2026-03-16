@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { runJavaScript, runPython, isPyodideReady } from "../utils/codeRunner";
+import { isPyodideReady, runPython } from "../utils/codeRunner";
+import { validateExercise, normalizeCode } from "../utils/exerciseValidation";
 import { motion, AnimatePresence } from "framer-motion";
 import Editor from "@monaco-editor/react";
 import {
@@ -121,6 +122,12 @@ const LEVELS = [
     hint: "Déclare la variable, puis affiche son contenu.",
     explanation: "Les variables servent à mémoriser des données et à les manipuler.",
     expectedOutput: "18",
+    requireStructure: {
+      javascript: ["regex:=\\s*18"],
+      python: ["regex:=\\s*18"],
+      lua: ["regex:=\\s*18"],
+    },
+    structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer une variable avec la valeur 18 puis de l'afficher (pas seulement afficher 18).",
     acceptedByLanguage: {
       javascript: ["let age = 18;\nconsole.log(age)", "const age = 18;\nconsole.log(age)", "var age = 18;\nconsole.log(age)"],
       python: ["age = 18\nprint(age)"],
@@ -140,6 +147,12 @@ const LEVELS = [
     expectedOutput: "12",
     requiredOperands: [7, 5],
     requiredOperator: "+",
+    requireStructure: {
+      javascript: ["regex:=\\s*7\\s*\\+\\s*5"],
+      python: ["regex:=\\s*7\\s*\\+\\s*5"],
+      lua: ["regex:=\\s*7\\s*\\+\\s*5"],
+    },
+    structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de mettre 7 + 5 dans une variable puis de l'afficher.",
     acceptedByLanguage: {
       javascript: ["let resultat = 7 + 5;\nconsole.log(resultat)", "const resultat = 7 + 5;\nconsole.log(resultat)"],
       python: ["resultat = 7 + 5\nprint(resultat)"],
@@ -157,6 +170,12 @@ const LEVELS = [
     hint: "Utilise if avec une comparaison >=.",
     explanation: "Les structures conditionnelles introduisent la prise de décision.",
     expectedOutput: "Réussi",
+    requireStructure: {
+      javascript: ["regex:=\\s*80"],
+      python: ["regex:=\\s*80"],
+      lua: ["regex:=\\s*80"],
+    },
+    structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer une variable avec la valeur 80 puis de tester la condition (pas seulement afficher Réussi).",
     acceptedByLanguage: {
       javascript: ["let score = 80;\nif (score >= 50) {\n  console.log('Réussi')\n}", "const score = 80;\nif (score >= 50) {\n  console.log(\"Réussi\")\n}"],
       python: ["score = 80\nif score >= 50:\n    print('Réussi')", 'score = 80\nif score >= 50:\n    print("Réussi")'],
@@ -174,6 +193,12 @@ const LEVELS = [
     hint: "Utilise if / else.",
     explanation: "Cette structure rend ton programme robuste en couvrant plusieurs situations.",
     expectedOutput: "Frais",
+    requireStructure: {
+      javascript: ["regex:=\\s*15"],
+      python: ["regex:=\\s*15"],
+      lua: ["regex:=\\s*15"],
+    },
+    structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer une variable avec la valeur 15 puis de tester la condition (pas seulement afficher Frais).",
     acceptedByLanguage: {
       javascript: ["let temperature = 15;\nif (temperature > 20) {\n  console.log('Chaud')\n} else {\n  console.log('Frais')\n}", 'const temperature = 15;\nif (temperature > 20) {\n  console.log("Chaud")\n} else {\n  console.log("Frais")\n}'],
       python: ["temperature = 15\nif temperature > 20:\n    print('Chaud')\nelse:\n    print('Frais')", 'temperature = 15\nif temperature > 20:\n    print("Chaud")\nelse:\n    print("Frais")'],
@@ -347,6 +372,12 @@ const LEVELS = [
     hint: "Utilise l'opérateur + (ou .. en Lua) pour coller des chaînes ensemble.",
     explanation: "La concaténation permet de construire dynamiquement des messages à partir de variables.",
     expectedOutput: "Bonjour Alice",
+    requireStructure: {
+      javascript: ["regex:=\\s*[\"']Alice[\"']"],
+      python: ["regex:=\\s*[\"']Alice[\"']"],
+      lua: ["regex:=\\s*[\"']Alice[\"']"],
+    },
+    structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer une variable avec \"Alice\" puis de concaténer (pas seulement afficher Bonjour Alice).",
     acceptedByLanguage: {
       javascript: ['const prenom = "Alice";\nconsole.log("Bonjour " + prenom)', "const prenom = 'Alice';\nconsole.log('Bonjour ' + prenom)", 'console.log("Bonjour " + "Alice")', 'console.log("Bonjour Alice")'],
       python: ['prenom = "Alice"\nprint("Bonjour " + prenom)', "prenom = 'Alice'\nprint('Bonjour ' + prenom)", 'print("Bonjour " + "Alice")', 'print("Bonjour Alice")'],
@@ -378,15 +409,21 @@ const LEVELS = [
     concept: "Conversion de types",
     pedagogy: "Mélanger des types dans un message nécessite souvent de convertir un nombre en texte.",
     task: 'Crée une variable age = 25 et affiche "Age: 25" en convertissant le nombre en chaîne.',
-    hint: "Utilise String() ou la concaténation directe en JS, str() en Python, ou %d en C.",
+    hint: "Utilise String() ou la concaténation directe en JS, str() en Python, tostring() en Lua, ou %d en C.",
     explanation: "La conversion de types est nécessaire pour assembler des données hétérogènes.",
     expectedOutput: "Age: 25",
+    requireStructure: {
+      javascript: ["regex:=\\s*25"],
+      python: ["regex:=\\s*25"],
+      lua: ["regex:(?=.*=\\s*25)(?=.*tostring)"],
+    },
+    structureRejectedMessage: "En Lua, la consigne demande une conversion explicite en chaîne : utilise tostring(age) (pas seulement la concaténation .. age qui convertit implicitement).",
     acceptedByLanguage: {
       javascript: ['const age = 25;\nconsole.log("Age: " + age)', 'const age = 25;\nconsole.log("Age: " + String(age))', 'console.log("Age: 25")'],
       python: ['age = 25\nprint("Age: " + str(age))', 'age = 25\nprint(f"Age: {age}")', 'print("Age: 25")'],
       java: ['int age = 25;\nSystem.out.println("Age: " + age);', 'System.out.println("Age: 25");'],
       c: ['int age = 25;\nprintf("Age: %d\\n", age);', 'printf("Age: 25\\n");', 'printf("Age: 25");'],
-      lua: ['local age = 25\nprint("Age: " .. age)', 'print("Age: 25")'],
+      lua: ['local age = 25\nprint("Age: " .. tostring(age))', 'print("Age: " .. tostring(25))'],
     },
   },
   {
@@ -432,6 +469,12 @@ const LEVELS = [
     hint: "Utilise else if (ou elif en Python, elseif en Lua) entre if et else.",
     explanation: "Les conditions en chaîne évitent d'imbriquer des if dans des else — le code reste lisible.",
     expectedOutput: "Majeur",
+    requireStructure: {
+      javascript: ["regex:=\\s*20"],
+      python: ["regex:=\\s*20"],
+      lua: ["regex:=\\s*20"],
+    },
+    structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer une variable avec la valeur 20 puis de tester les conditions (pas seulement afficher Majeur).",
     acceptedByLanguage: {
       javascript: ['const age = 20;\nif (age < 13) {\n  console.log("Enfant")\n} else if (age < 18) {\n  console.log("Adolescent")\n} else {\n  console.log("Majeur")\n}'],
       python: ['age = 20\nif age < 13:\n    print("Enfant")\nelif age < 18:\n    print("Adolescent")\nelse:\n    print("Majeur")'],
@@ -517,6 +560,7 @@ const LEVELS = [
     hint: "Utilise .filter() en JS, une compréhension de liste ou une boucle en Python.",
     explanation: "Le filtrage transforme une collection en gardant uniquement les éléments qui satisfont une condition.",
     expectedOutput: "2\n4",
+    requireStructure: { lua: ["for", "ipairs", "pairs", "{"] },
     acceptedByLanguage: {
       javascript: ['const nombres = [1, 2, 3, 4, 5];\nconst pairs = nombres.filter(n => n % 2 === 0);\nfor (const n of pairs) {\n  console.log(n)\n}', 'const pairs = [1,2,3,4,5].filter(n => n % 2 === 0);\npairs.forEach(n => console.log(n))'],
       python: ['nombres = [1, 2, 3, 4, 5]\npairs = [n for n in nombres if n % 2 == 0]\nfor n in pairs:\n    print(n)', 'for n in [1,2,3,4,5]:\n    if n % 2 == 0:\n        print(n)'],
@@ -597,125 +641,15 @@ const LEVELS = [
 
 const STORAGE_KEY = "viervier-lyngo-progress-v2";
 
-const COMMENT_PREFIXES = ["//", "#", "--"];
+// Indique le nom de la fonction d'affichage pour les messages d'erreur
+const OUTPUT_LABEL = { javascript: "console.log()", python: "print()", lua: "print()", java: "System.out.println()", c: "printf()" };
 
-function stripComments(str) {
-  return str
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      return trimmed.length > 0 && !COMMENT_PREFIXES.some((p) => trimmed.startsWith(p));
-    })
-    .join("\n");
-}
-
-function normalizeCode(str) {
-  return stripComments(str).replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-// For non-JS languages: validation that checks both output intent and code structure
-function flexibleMatch(userCode, level, language) {
-  const accepted = level.acceptedByLanguage[language] || [];
-  const userNorm = normalizeCode(userCode);
-  const stripped = stripComments(userCode);
-  const keyword = OUTPUT_KEYWORD[language];
-
-  // 1. Exact normalized match with an accepted solution
-  if (accepted.some((s) => normalizeCode(s) === userNorm)) return true;
-
-  const hasKeyword = keyword && stripped.toLowerCase().includes(keyword.toLowerCase());
-  if (!hasKeyword) return false;
-
-  // 2. Mission exige une fonction précise (ex: addition(a, b))
-  if (level.requiredFunctionName) {
-    const funcName = level.requiredFunctionName.toLowerCase();
-    const hasDefinition =
-      new RegExp(`function\\s+${funcName}\\s*\\(|def\\s+${funcName}\\s*\\(`, "i").test(stripped) ||
-      userNorm.includes(`function ${funcName}`) ||
-      userNorm.includes(`def ${funcName}`);
-    const args = level.requiredFunctionArgs || [];
-    const hasCall =
-      args.length === 0
-        ? new RegExp(`${funcName}\\s*\\(`, "i").test(stripped)
-        : new RegExp(`${funcName}\\s*\\([^)]*${args[0]}[^)]*${args[1]}`, "i").test(stripped) ||
-          new RegExp(`${funcName}\\s*\\([^)]*${args[1]}[^)]*${args[0]}`, "i").test(stripped);
-    if (!hasDefinition || !hasCall) return false;
-  }
-
-  // 3. Mission exige des opérandes et un opérateur précis (ex: 6 × 4, 7 + 5)
-  if (level.requiredOperands && level.requiredOperator) {
-    const [a, b] = level.requiredOperands;
-    const opChar = level.requiredOperator.replace("*", "\\*").replace("+", "\\+").replace("-", "\\-").replace("/", "\\/");
-    const exprPattern1 = new RegExp(`${a}\\s*${opChar}\\s*${b}`);
-    const exprPattern2 = new RegExp(`${b}\\s*${opChar}\\s*${a}`);
-    const hasRequiredExpr = exprPattern1.test(stripped) || exprPattern2.test(stripped);
-    if (!hasRequiredExpr) return false;
-    const expectedNum = Number(level.expectedOutput.trim());
-    const exprs = stripped.match(/\d+(?:\.\d+)?(?:\s*[\+\-\*\/]\s*\d+(?:\.\d+)?)+/g) || [];
-    const correctResult = exprs.some((expr) => {
-      try { return eval(expr) === expectedNum; } catch { return false; }
-    });
-    if (correctResult) return true;
-    return false;
-  }
-
-  const expectedNum = Number(level.expectedOutput.trim());
-  const isNumericOutput = !isNaN(expectedNum) && String(expectedNum) === level.expectedOutput.trim();
-
-  // 3b. Premier élément d'un tableau/liste — on accepte n'importe quel nom de variable (ex: liste, nombres, tab)
-  if (level.expectedOutput === "10" && hasKeyword) {
-    const hasTable10_20_30 =
-      /\{10\s*,\s*20\s*,\s*30\s*\}|\{10,20,30\}/.test(stripped) ||
-      /\[\s*10\s*,\s*20\s*,\s*30\s*\]|\[10,20,30\]/.test(stripped);
-    if (language === "lua" && hasTable10_20_30 && /\[1\]/.test(stripped)) return true;
-    if ((language === "javascript" || language === "python" || language === "java" || language === "c") && hasTable10_20_30 && /\[0\]/.test(stripped)) return true;
-  }
-
-  // 4. Sortie numérique sans contrainte d'opérande : une expression littérale doit donner le résultat
-  //    (on n'accepte plus print(24) seul ni n'importe quelle paire de nombres)
-  if (isNumericOutput && !level.requiredOperands) {
-    const exprs = stripped.match(/\d+(?:\.\d+)?(?:\s*[\+\-\*\/]\s*\d+(?:\.\d+)?)+/g) || [];
-    if (exprs.some((expr) => { try { return eval(expr) === expectedNum; } catch { return false; } })) return true;
-    return false;
-  }
-
-  if (isNumericOutput && level.requiredOperands) {
-    const exprs = stripped.match(/\d+(?:\.\d+)?(?:\s*[\+\-\*\/]\s*\d+(?:\.\d+)?)+/g) || [];
-    if (exprs.some((expr) => { try { return eval(expr) === expectedNum; } catch { return false; } })) return true;
-    return false;
-  }
-
-  // 5. Mission exige un accès par clé (ex: objet avec prenom) — rejette print("Lina") seul
-  if (level.requiredKeyAccess) {
-    const key = level.requiredKeyAccess;
-    const hasKeyAccess =
-      new RegExp(`\\.${key}\\b`).test(stripped) ||
-      new RegExp(`\\["\']?${key}["\']?\\]`).test(stripped);
-    if (!hasKeyAccess) return false;
-  }
-
-  // 6. Sortie chaîne : le texte attendu doit apparaître (guillemets ou concaténation)
-  const escaped = level.expectedOutput.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (new RegExp(`["'\`]${escaped}["'\`]`).test(stripped)) return true;
-
-  return false;
-}
-
-// Output keyword per language for error analysis
-const OUTPUT_KEYWORD = {
-  javascript: "console.log",
-  python: "print",
-  java: "System.out.println",
-  c: "printf",
-  lua: "print",
-};
-
-// Analyse a JS failure and return a human-readable hint
-function analyzeJSFailure(actualOutput, expectedOutput, runtimeError) {
+// Analyse un échec (sortie réelle vs attendue) et renvoie un indice lisible
+function analyzeJSFailure(actualOutput, expectedOutput, runtimeError, outputLabel = "console.log()") {
   if (runtimeError) return null; // the error message is already shown
 
   if (actualOutput === "" || actualOutput === null) {
-    return "Ton code ne produit aucune sortie. As-tu bien appelé console.log() ?";
+    return `Ton code ne produit aucune sortie. As-tu bien appelé ${outputLabel} ?`;
   }
   if (actualOutput.toLowerCase() === expectedOutput.toLowerCase()) {
     return "Ta sortie est presque correcte — vérifie les majuscules et minuscules.";
@@ -733,35 +667,6 @@ function analyzeJSFailure(actualOutput, expectedOutput, runtimeError) {
     return `Tu affiches trop de choses. On attend juste "${expectedOutput}" — retire le reste.`;
   }
   return `Ton code affiche "${actualOutput}" mais on attend "${expectedOutput}". Vérifie le texte entre guillemets.`;
-}
-
-// Analyse a pattern-matching failure and return a human-readable hint
-function analyzePatternFailure(userCode, level, language) {
-  const stripped = stripComments(userCode).trim();
-  const keyword = OUTPUT_KEYWORD[language];
-  const expected = level.expectedOutput;
-
-  if (!stripped) {
-    return "Le code est vide. Commence par écrire quelque chose !";
-  }
-  if (keyword && !stripped.toLowerCase().includes(keyword.toLowerCase())) {
-    return `Il semble que tu n'utilises pas encore \`${keyword}()\` pour afficher quelque chose.`;
-  }
-  // Check if expected string content is approximately present
-  const hasExpected = stripped.includes(expected);
-  if (!hasExpected) {
-    // Check for wrong case
-    if (stripped.toLowerCase().includes(expected.toLowerCase())) {
-      return `Le texte est presque bon — vérifie les majuscules et minuscules. On attend : "${expected}".`;
-    }
-    // Check for missing punctuation
-    const withoutPunct = expected.replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, "");
-    if (stripped.toLowerCase().includes(withoutPunct.toLowerCase())) {
-      return `Le texte est presque correct mais il manque la ponctuation. On attend exactement : "${expected}".`;
-    }
-    return `Le texte affiché ne correspond pas. Vérifie l'orthographe exacte : on attend "${expected}". (Pour voir la sortie réelle de ton code, utilise JavaScript ou Python.)`;
-  }
-  return "La structure de ton code n'est pas tout à fait correcte. Relis la mission attentivement.";
 }
 
 function getStarterCode(level, language) {
@@ -921,6 +826,7 @@ function CodeEditor({ value, onChange, language, onSubmit }) {
           wordWrap: "on",
           tabSize: 2,
           insertSpaces: true,
+          autoIndent: "full",
           renderLineHighlight: "line",
           roundedSelection: true,
           cursorBlinking: "smooth",
@@ -1030,88 +936,24 @@ export default function LearnPage() {
     if (isRunning) return;
     setIsRunning(true);
     try {
-    let isCorrect = false;
-    let runtimeError = null;
-    let actualOutput = null;
-    let isExactMatch = false;
-    let errorHint = null;
+      if (language === "python" && !isPyodideReady()) setPyodideStatus("loading");
+      const result = await validateExercise(currentCode, currentLevel, language);
+      if (language === "python") setPyodideStatus("ready");
 
-    if (language === "javascript") {
-      const result = runJavaScript(currentCode);
-      runtimeError = result.error;
-      actualOutput = result.output ?? "";
-      isCorrect = !runtimeError && result.output === currentLevel.expectedOutput;
-      if (isCorrect && currentLevel.requiredFunctionName) {
-        const stripped = stripComments(currentCode);
-        const fn = currentLevel.requiredFunctionName;
-        const hasDef =
-          new RegExp(`function\\s+${fn}\\s*\\(`).test(stripped) ||
-          new RegExp(`${fn}\\s*=\\s*function`).test(stripped) ||
-          new RegExp(`${fn}\\s*=\\s*\\([^)]*\\)\\s*=>`).test(stripped);
-        const hasCall = new RegExp(`${fn}\\s*\\(`).test(stripped);
-        if (!hasDef || !hasCall) isCorrect = false;
-      }
-      if (isCorrect && currentLevel.requiredOperands && currentLevel.requiredOperator) {
-        const stripped = stripComments(currentCode);
-        const [a, b] = currentLevel.requiredOperands;
-        const op = currentLevel.requiredOperator.replace("*", "\\*");
-        const hasExpr = new RegExp(`${a}\\s*${op}\\s*${b}`).test(stripped) || new RegExp(`${b}\\s*${op}\\s*${a}`).test(stripped);
-        if (!hasExpr) isCorrect = false;
-      }
-      if (isCorrect && currentLevel.requiredKeyAccess) {
-        const stripped = stripComments(currentCode);
-        const key = currentLevel.requiredKeyAccess;
-        const hasKeyAccess =
-          new RegExp(`\\.${key}\\b`).test(stripped) ||
-          new RegExp(`\\["\']?${key}["\']?\\]`).test(stripped) ||
-          new RegExp(`\\[${key}\\]`).test(stripped);
-        if (!hasKeyAccess) isCorrect = false;
-      }
-      isExactMatch = acceptedSolutions.some((s) => normalizeCode(s) === normalizeCode(currentCode));
+      const isCorrect = result.correct;
+      const runtimeError = result.error ?? null;
+      const actualOutput = result.output ?? null;
+      const isExactMatch = acceptedSolutions.some((s) => normalizeCode(s) === normalizeCode(currentCode));
+      let errorHint = null;
       if (!isCorrect) {
-        errorHint = analyzeJSFailure(actualOutput, currentLevel.expectedOutput, runtimeError);
+        if (result.structureRejected) {
+          errorHint = result.structureRejectedMessage || "La sortie est bonne, mais il faut utiliser une boucle ou un tableau pour traiter la liste, pas seulement afficher le résultat.";
+        } else if (language === "java" || language === "c") {
+          errorHint = "Relis la mission : vérifie la fonction d'affichage, le texte exact à afficher ou les opérations demandées.";
+        } else {
+          errorHint = analyzeJSFailure(actualOutput, currentLevel.expectedOutput, runtimeError, OUTPUT_LABEL[language]);
+        }
       }
-    } else if (language === "python") {
-      if (!isPyodideReady()) setPyodideStatus("loading");
-      const result = await runPython(currentCode);
-      setPyodideStatus("ready");
-      runtimeError = result.error;
-      actualOutput = result.output ?? "";
-      isCorrect = !runtimeError && result.output === currentLevel.expectedOutput;
-      if (isCorrect && currentLevel.requiredFunctionName) {
-        const stripped = stripComments(currentCode);
-        const fn = currentLevel.requiredFunctionName;
-        const hasDef = new RegExp(`def\\s+${fn}\\s*\\(`).test(stripped);
-        const hasCall = new RegExp(`${fn}\\s*\\(`).test(stripped);
-        if (!hasDef || !hasCall) isCorrect = false;
-      }
-      if (isCorrect && currentLevel.requiredOperands && currentLevel.requiredOperator) {
-        const stripped = stripComments(currentCode);
-        const [a, b] = currentLevel.requiredOperands;
-        const op = currentLevel.requiredOperator.replace("*", "\\*");
-        const hasExpr = new RegExp(`${a}\\s*${op}\\s*${b}`).test(stripped) || new RegExp(`${b}\\s*${op}\\s*${a}`).test(stripped);
-        if (!hasExpr) isCorrect = false;
-      }
-      if (isCorrect && currentLevel.requiredKeyAccess) {
-        const stripped = stripComments(currentCode);
-        const key = currentLevel.requiredKeyAccess;
-        const hasKeyAccess =
-          new RegExp(`\\.${key}\\b`).test(stripped) ||
-          new RegExp(`\\["\']?${key}["\']?\\]`).test(stripped) ||
-          new RegExp(`\\[${key}\\]`).test(stripped);
-        if (!hasKeyAccess) isCorrect = false;
-      }
-      isExactMatch = acceptedSolutions.some((s) => normalizeCode(s) === normalizeCode(currentCode));
-      if (!isCorrect && !runtimeError) {
-        errorHint = analyzeJSFailure(actualOutput, currentLevel.expectedOutput, runtimeError);
-      }
-    } else {
-      isCorrect = flexibleMatch(currentCode, currentLevel, language);
-      isExactMatch = acceptedSolutions.some((s) => normalizeCode(s) === normalizeCode(currentCode));
-      if (!isCorrect) {
-        errorHint = analyzePatternFailure(currentCode, currentLevel, language);
-      }
-    }
 
     setState((prev) => {
       const alreadyCompleted = prev.completed.includes(currentLevel.id);

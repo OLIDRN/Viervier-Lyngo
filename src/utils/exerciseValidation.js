@@ -1,8 +1,25 @@
 /**
- * Validation partagée des exercices (Exercises + Duel).
- * Utilise codeRunner pour JS/Python et flexibleMatch pour Lua/Java/C.
+ * Validation partagée des exercices (Learn, Exercises, Duel).
+ * JS/Python/Lua : exécution réelle + comparaison de sortie (+ structure optionnelle pour Lua).
+ * Java/C : pattern matching (flexibleMatch) faute d'exécution dans le navigateur.
  */
-import { runJavaScript, runPython } from "./codeRunner";
+import { runJavaScript, runPython, runLua } from "./codeRunner";
+
+/**
+ * Normalise la sortie pour comparaison (fins de ligne, espaces finaux).
+ * Les nombres entiers affichés avec décimales (ex. "8.0") sont ramenés à la forme entière ("8").
+ */
+export function normalizeOutput(s) {
+  if (s == null) return "";
+  const lines = String(s).replace(/\r\n/g, "\n").trimEnd().split("\n");
+  const normalized = lines.map((line) => {
+    const t = line.trimEnd();
+    const num = parseFloat(t);
+    if (t !== "" && !Number.isNaN(num) && Number.isInteger(num)) return String(Math.round(num));
+    return t;
+  });
+  return normalized.join("\n");
+}
 
 const COMMENT_PREFIXES = ["//", "#", "--"];
 
@@ -13,7 +30,8 @@ function stripComments(str) {
   }).join("\n");
 }
 
-function normalizeCode(str) {
+/** Pour comparaison de solutions (ex. isExactMatch). */
+export function normalizeCode(str) {
   return stripComments(str).replace(/\s+/g, " ").trim().toLowerCase();
 }
 
@@ -23,11 +41,16 @@ function flexibleMatch(code, exercise, language) {
   const accepted = exercise.acceptedByLanguage?.[language] || [];
   const userNorm = normalizeCode(code);
   const stripped = stripComments(code);
+  const strippedLower = stripped.toLowerCase();
   const keyword = OUTPUT_KEYWORD[language];
 
   if (accepted.some((s) => normalizeCode(s) === userNorm)) return true;
 
-  const hasKeyword = keyword && stripped.toLowerCase().includes(keyword.toLowerCase());
+  if (language === "lua" && exercise.expectedOutput === "client.lua") {
+    if (strippedLower.includes("client_script") && strippedLower.includes("client.lua")) return true;
+  }
+
+  const hasKeyword = keyword && strippedLower.includes(keyword.toLowerCase());
   if (!hasKeyword) return false;
 
   if (exercise.requiredFunctionName) {
@@ -72,60 +95,72 @@ function flexibleMatch(code, exercise, language) {
   return false;
 }
 
+/** Vérifie que le code contient au moins un des motifs (chaîne, ou "regex:..." pour une regex). */
+function checkStructure(code, patterns) {
+  const stripped = stripComments(code);
+  return patterns.some((pat) => {
+    if (typeof pat !== "string") return new RegExp(pat).test(stripped);
+    if (pat.startsWith("regex:")) return new RegExp(pat.slice(6)).test(stripped);
+    return stripped.includes(pat);
+  });
+}
+
 /**
  * Valide le code pour un exercice et une langue.
- * @returns {Promise<{ correct: boolean, output?: string, error?: string }>}
+ * @returns {Promise<{ correct: boolean, output?: string, error?: string, structureRejected?: boolean, structureRejectedMessage?: string }>}
  */
 export async function validateExercise(code, exercise, language) {
+  const runAndCheck = (correct, output, error) => {
+    let structureRejected = false;
+    const patterns = exercise.requireStructure?.[language];
+    if (correct && Array.isArray(patterns) && patterns.length > 0 && !checkStructure(code, patterns)) {
+      correct = false;
+      structureRejected = true;
+    }
+    const forbidden = exercise.forbiddenStructure?.[language];
+    if (correct && Array.isArray(forbidden) && forbidden.length > 0 && checkStructure(code, forbidden)) {
+      correct = false;
+      structureRejected = true;
+    }
+    const out = { correct, output: output || undefined, error: error || undefined };
+    if (structureRejected) {
+      out.structureRejected = true;
+      out.structureRejectedMessage = exercise.structureRejectedMessage ?? exercise.forbiddenStructureMessage;
+    }
+    return out;
+  };
+
   if (language === "javascript") {
     const r = runJavaScript(code);
     const output = r.output ?? "";
-    let correct = !r.error && r.output === exercise.expectedOutput;
-    if (correct && exercise.requiredFunctionName) {
-      const stripped = stripComments(code);
-      const fn = exercise.requiredFunctionName;
-      const hasDef =
-        new RegExp(`function\\s+${fn}\\s*\\(`).test(stripped) ||
-        new RegExp(`${fn}\\s*=\\s*function`).test(stripped) ||
-        new RegExp(`${fn}\\s*=\\s*\\([^)]*\\)\\s*=>`).test(stripped);
-      const hasCall = new RegExp(`${fn}\\s*\\(`).test(stripped);
-      if (!hasDef || !hasCall) correct = false;
-    }
-    if (correct && exercise.requiredOperands && exercise.requiredOperator) {
-      const stripped = stripComments(code);
-      const [a, b] = exercise.requiredOperands;
-      const op = exercise.requiredOperator.replace("*", "\\*");
-      const hasExpr =
-        new RegExp(`${a}\\s*${op}\\s*${b}`).test(stripped) ||
-        new RegExp(`${b}\\s*${op}\\s*${a}`).test(stripped);
-      if (!hasExpr) correct = false;
-    }
-    return { correct, output: output || undefined, error: r.error || undefined };
+    const correct = !r.error && normalizeOutput(r.output) === normalizeOutput(exercise.expectedOutput);
+    return runAndCheck(correct, output, r.error);
   }
 
   if (language === "python") {
     const r = await runPython(code);
     const output = r.output ?? "";
-    let correct = !r.error && r.output === exercise.expectedOutput;
-    if (correct && exercise.requiredFunctionName) {
-      const stripped = stripComments(code);
-      const fn = exercise.requiredFunctionName;
-      const hasDef = new RegExp(`def\\s+${fn}\\s*\\(`).test(stripped);
-      const hasCall = new RegExp(`${fn}\\s*\\(`).test(stripped);
-      if (!hasDef || !hasCall) correct = false;
-    }
-    if (correct && exercise.requiredOperands && exercise.requiredOperator) {
-      const stripped = stripComments(code);
-      const [a, b] = exercise.requiredOperands;
-      const op = exercise.requiredOperator.replace("*", "\\*");
-      const hasExpr =
-        new RegExp(`${a}\\s*${op}\\s*${b}`).test(stripped) ||
-        new RegExp(`${b}\\s*${op}\\s*${a}`).test(stripped);
-      if (!hasExpr) correct = false;
-    }
-    return { correct, output: output || undefined, error: r.error || undefined };
+    const correct = !r.error && normalizeOutput(r.output) === normalizeOutput(exercise.expectedOutput);
+    return runAndCheck(correct, output, r.error);
+  }
+
+  const onlyLua = exercise.acceptedByLanguage && Object.keys(exercise.acceptedByLanguage).length === 1 && exercise.acceptedByLanguage.lua;
+  const skipRunLua = exercise.isFiveM || onlyLua;
+  if (language === "lua" && !skipRunLua) {
+    const r = runLua(code);
+    const output = r.output ?? "";
+    const correct = !r.error && normalizeOutput(r.output) === normalizeOutput(exercise.expectedOutput);
+    return runAndCheck(correct, output, r.error);
   }
 
   const correct = flexibleMatch(code, exercise, language);
+  const forbidden = exercise.forbiddenStructure?.[language];
+  if (correct && Array.isArray(forbidden) && forbidden.length > 0 && checkStructure(code, forbidden)) {
+    return {
+      correct: false,
+      structureRejected: true,
+      structureRejectedMessage: exercise.forbiddenStructureMessage ?? exercise.structureRejectedMessage,
+    };
+  }
   return { correct };
 }

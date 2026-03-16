@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Editor from "@monaco-editor/react";
 import { FlaskConical, Keyboard, Play, RotateCcw, TerminalSquare } from "lucide-react";
-import { runJavaScript, runPython, isPyodideReady } from "../utils/codeRunner";
+import { runJavaScript, runPython, runLua, isPyodideReady } from "../utils/codeRunner";
 
 // Thème Monaco aligné avec Viervier (réutilise la même identité que Learn)
 function defineViervierTheme(monaco) {
@@ -80,11 +80,11 @@ const LANGUAGES = {
     short: "Lua",
     extension: "lua",
     monacoLang: "lua",
-    starter: '-- Bac à sable Lua\n-- Note : Lua ne s\'exécute pas dans le navigateur\nprint("Hello, World!")\n',
+    starter: '-- Bac à sable Lua\nprint("Hello, World!")\n',
     accent: "#818cf8",
     dot: "bg-indigo-400",
     badge: "bg-indigo-400/10 text-indigo-300 border-indigo-400/20",
-    runs: false,
+    runs: true,
   },
 };
 
@@ -133,10 +133,13 @@ export default function SandboxPage() {
         const r = await runPython(code);
         setPyodideStatus("ready");
         setResult({ output: r.output, error: r.error });
+      } else if (language === "lua") {
+        const r = runLua(code);
+        setResult({ output: r.output, error: r.error });
       } else {
         setResult({
           output: null,
-          error: `L'exécution de ${lang.label} n'est pas supportée dans le navigateur. Utilise JavaScript ou Python pour tester ton code ici.`,
+          error: `L'exécution de ${lang.label} n'est pas supportée dans le navigateur. Utilise JavaScript, Python ou Lua pour tester ton code ici.`,
           unsupported: true,
         });
       }
@@ -183,7 +186,7 @@ export default function SandboxPage() {
               </div>
               <div className="min-w-0">
                 <h1 className="font-mono text-lg font-bold tracking-tight text-white">Bac à sable</h1>
-                <p className="truncate text-xs font-medium text-slate-500">JS & Python exécutables ici</p>
+                <p className="truncate text-xs font-medium text-slate-500">JS, Python & Lua exécutables ici</p>
               </div>
             </div>
 
@@ -272,6 +275,7 @@ export default function SandboxPage() {
                 wordWrap: "on",
                 tabSize: 2,
                 insertSpaces: true,
+                autoIndent: "full",
                 renderLineHighlight: "line",
                 roundedSelection: true,
                 cursorBlinking: "smooth",

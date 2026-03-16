@@ -912,6 +912,9 @@ function DuelRoom() {
                   scrollBeyondLastLine: false,
                   padding: { top: 12, bottom: 12 },
                   fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                  tabSize: 2,
+                  insertSpaces: true,
+                  autoIndent: "full",
                 }}
               />
             </div>

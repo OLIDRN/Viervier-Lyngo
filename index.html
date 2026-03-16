@@ -10,6 +10,14 @@
   </head>
   <body style="background-color: #080c14;">
     <div id="root"></div>
+    <!-- Polyfill pour Fengari (Lua) : process et global n'existent pas dans le navigateur -->
+    <script>
+      window.global = window.global || window;
+      window.process = window.process || {
+        env: {},
+        versions: { node: "18" }
+      };
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

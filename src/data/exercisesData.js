@@ -78,6 +78,12 @@ export const EXERCISES = {
       hint: "Déclare n, puis passe-la à la fonction d'affichage.",
       explanation: "Une variable mémorise une valeur réutilisable.",
       expectedOutput: "42",
+      requireStructure: {
+        javascript: ["regex:=\\\\s*42"],
+        python: ["regex:=\\\\s*42"],
+        lua: ["regex:=\\\\s*42"],
+      },
+      structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer une variable avec la valeur 42 puis de l'afficher (pas seulement afficher 42).",
       acceptedByLanguage: {
         javascript: ["let n = 42;\nconsole.log(n)", "const n = 42;\nconsole.log(n)"],
         python: ["n = 42\nprint(n)"],
@@ -94,6 +100,12 @@ export const EXERCISES = {
       hint: "Entoure le texte de guillemets.",
       explanation: "Les chaînes de caractères représentent du texte.",
       expectedOutput: "Alice",
+      requireStructure: {
+        javascript: ["regex:=\\\\s*[\"']Alice[\"']"],
+        python: ["regex:=\\\\s*[\"']Alice[\"']"],
+        lua: ["regex:=\\\\s*[\"']Alice[\"']"],
+      },
+      structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer une variable avec \"Alice\" puis de l'afficher (pas seulement afficher Alice).",
       acceptedByLanguage: {
         javascript: ['const prenom = "Alice";\nconsole.log(prenom)', "const prenom = 'Alice';\nconsole.log(prenom)"],
         python: ['prenom = "Alice"\nprint(prenom)', "prenom = 'Alice'\nprint(prenom)"],
@@ -110,6 +122,12 @@ export const EXERCISES = {
       hint: "Deux appels d'affichage successifs.",
       explanation: "On peut déclarer autant de variables que nécessaire.",
       expectedOutput: "10\n20",
+      requireStructure: {
+        javascript: ["regex:(?=.*=\\\\s*10)(?=.*=\\\\s*20)"],
+        python: ["regex:(?=.*=\\\\s*10)(?=.*=\\\\s*20)"],
+        lua: ["regex:(?=.*=\\\\s*10)(?=.*=\\\\s*20)"],
+      },
+      structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de créer deux variables (10 et 20) puis de les afficher (pas seulement afficher 10 et 20).",
       acceptedByLanguage: {
         javascript: ["let x = 10;\nlet y = 20;\nconsole.log(x)\nconsole.log(y)"],
         python: ["x = 10\ny = 20\nprint(x)\nprint(y)"],
@@ -128,6 +146,12 @@ export const EXERCISES = {
       expectedOutput: "15",
       requiredOperands: [7, 8],
       requiredOperator: "+",
+      requireStructure: {
+        javascript: ["regex:=\\\\s*7\\\\s*\\\\+\\\\s*8"],
+        python: ["regex:=\\\\s*7\\\\s*\\\\+\\\\s*8"],
+        lua: ["regex:=\\\\s*7\\\\s*\\\\+\\\\s*8"],
+      },
+      structureRejectedMessage: "La sortie est correcte, mais l'exercice demande de mettre le calcul 7 + 8 dans une variable puis d'afficher le résultat.",
       acceptedByLanguage: {
         javascript: ["let r = 7 + 8;\nconsole.log(r)", "const r = 7 + 8;\nconsole.log(r)", "console.log(7 + 8)"],
         python: ["r = 7 + 8\nprint(r)", "print(7 + 8)"],
@@ -210,6 +234,14 @@ export const EXERCISES = {
       hint: "JS/Python : 2 ** 3. Java : Math.pow(2,3). Lua : 2^3.",
       explanation: "L'exponentiation est une multiplication répétée.",
       expectedOutput: "8",
+      requireStructure: {
+        javascript: ["**", "Math.pow"],
+        python: ["**"],
+        java: ["Math.pow"],
+        c: ["pow("],
+        lua: ["^"],
+      },
+      structureRejectedMessage: "La consigne demande d'utiliser l'opération puissance (2^3 ou 2**3), pas une autre expression qui donne 8.",
       acceptedByLanguage: {
         javascript: ["console.log(2 ** 3)", "console.log(Math.pow(2, 3))"],
         python: ["print(2 ** 3)"],
@@ -712,6 +744,7 @@ export const EXERCISES = {
       hint: "Parcours la liste et incrémente un compteur si l'élément est pair.",
       explanation: "Compter les éléments satisfaisant une condition est un pattern très fréquent.",
       expectedOutput: "3",
+      requireStructure: { lua: ["for", "ipairs", "pairs", "{"] },
       acceptedByLanguage: {
         javascript: ["const tab = [1,2,3,4,5,6];\nlet count = 0;\nfor (const n of tab) {\n  if (n % 2 === 0) count++\n}\nconsole.log(count)"],
         python: ["tab = [1, 2, 3, 4, 5, 6]\ncount = 0\nfor n in tab:\n    if n % 2 == 0:\n        count += 1\nprint(count)"],
@@ -728,6 +761,7 @@ export const EXERCISES = {
       hint: "Parcours la liste et accumule chaque élément dans une variable somme.",
       explanation: "Réduire une liste à une valeur unique par accumulation.",
       expectedOutput: "15",
+      requireStructure: { lua: ["for", "ipairs", "pairs", "{"] },
       acceptedByLanguage: {
         javascript: ["const tab = [1,2,3,4,5];\nlet s = 0;\nfor (const n of tab) s += n\nconsole.log(s)"],
         python: ["tab = [1, 2, 3, 4, 5]\nprint(sum(tab))"],
@@ -744,6 +778,7 @@ export const EXERCISES = {
       hint: "Initialise max au premier élément, puis compare chaque élément.",
       explanation: "Parcourir une liste à la recherche d'un extrême est un algorithme classique.",
       expectedOutput: "9",
+      requireStructure: { lua: ["for", "ipairs", "pairs", "{"] },
       acceptedByLanguage: {
         javascript: ["const tab = [3,1,4,1,5,9,2,6];\nlet max = tab[0];\nfor (const n of tab) {\n  if (n > max) max = n\n}\nconsole.log(max)"],
         python: ["tab = [3,1,4,1,5,9,2,6]\nprint(max(tab))"],
@@ -760,6 +795,7 @@ export const EXERCISES = {
       hint: "Parcours la liste depuis la fin, ou utilise reverse().",
       explanation: "Inverser l'ordre d'une collection est fondamental pour de nombreux algorithmes.",
       expectedOutput: "3\n2\n1",
+      requireStructure: { lua: ["for", "ipairs", "pairs", "{"] },
       acceptedByLanguage: {
         javascript: ["const tab = [1,2,3];\nfor (let i = tab.length - 1; i >= 0; i--) {\n  console.log(tab[i])\n}"],
         python: ["tab = [1, 2, 3]\nfor n in reversed(tab):\n    print(n)"],
@@ -877,6 +913,14 @@ export const EXERCISES = {
       hint: "Si n < 0, retourne -n, sinon retourne n.",
       explanation: "Recoder une fonction standard renforce la compréhension des conditions.",
       expectedOutput: "5",
+      forbiddenStructure: {
+        javascript: ["Math.abs"],
+        python: ["abs("],
+        java: ["Math.abs"],
+        c: ["abs("],
+        lua: ["math.abs"],
+      },
+      forbiddenStructureMessage: "La consigne demande de ne pas utiliser la fonction abs() du langage : implémente la logique toi-même (ex. si n < 0 alors -n sinon n).",
       acceptedByLanguage: {
         javascript: ["function valAbsolue(n) {\n  return n < 0 ? -n : n\n}\nconsole.log(valAbsolue(-5))"],
         python: ["def valAbsolue(n):\n    return -n if n < 0 else n\n\nprint(valAbsolue(-5))"],
@@ -1033,6 +1077,7 @@ export const EXERCISES = {
   fivem: [
     {
       id: 1,
+      isFiveM: true,
       difficulty: 1,
       title: "fxmanifest.lua",
       concept: "Déclarer une resource",
@@ -1051,6 +1096,7 @@ export const EXERCISES = {
     },
     {
       id: 2,
+      isFiveM: true,
       difficulty: 1,
       title: "CreateThread et Wait",
       concept: "Thread asynchrone",
@@ -1064,6 +1110,7 @@ export const EXERCISES = {
     },
     {
       id: 3,
+      isFiveM: true,
       difficulty: 2,
       title: "Première native",
       concept: "Appeler le jeu",
@@ -1085,6 +1132,7 @@ export const EXERCISES = {
     },
     {
       id: 4,
+      isFiveM: true,
       difficulty: 2,
       title: "RegisterNetEvent (client)",
       concept: "Écouter un event",
@@ -1098,6 +1146,7 @@ export const EXERCISES = {
     },
     {
       id: 5,
+      isFiveM: true,
       difficulty: 2,
       title: "TriggerServerEvent",
       concept: "Envoyer un event au serveur",
@@ -1111,6 +1160,7 @@ export const EXERCISES = {
     },
     {
       id: 6,
+      isFiveM: true,
       difficulty: 2,
       title: "Event serveur (RegisterNetEvent)",
       concept: "Recevoir un event côté serveur",
